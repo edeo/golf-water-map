@@ -17,8 +17,11 @@ et_network/et_station_id are set for real here:
   good analog for turf ET in this area.
 """
 import sqlite3
+from pathlib import Path
 
-DB_PATH = "data/golf_water.db"
+ROOT = Path(__file__).resolve().parent.parent
+DB_PATH = ROOT / "data" / "golf_water.db"
+SCHEMA_PATH = ROOT / "schema.sql"
 
 COURSES = [
     # name, state, lat, lon, acres, turf_type, kc, et_network, et_station_id
@@ -41,8 +44,9 @@ COURSES = [
 
 
 def main():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    conn.executescript(open("schema.sql").read())
+    conn.executescript(SCHEMA_PATH.read_text())
     conn.executemany(
         """INSERT INTO courses
            (name, state, latitude, longitude, irrigated_acres, turf_type, kc, et_network, et_station_id)

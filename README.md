@@ -79,10 +79,16 @@ datasette publish fly data/golf_water.db \
   --install datasette-cluster-map
 ```
 
-For the daily refresh in production, add a GitHub Actions workflow that
-runs `compute_water_use.py` on a schedule, commits the updated `.db` file
-(or writes to a Litestream-replicated volume), and re-publishes — mirroring
-whatever your blog pipeline already does for scheduled updates.
+`.github/workflows/daily-update.yml` runs `compute_water_use.py` on a
+schedule, commits the updated `.db` file back to the repo, and
+re-publishes to Fly.io — mirroring whatever your blog pipeline already
+does for scheduled updates. It needs two repo secrets set under
+**Settings > Secrets and variables > Actions**:
+
+- `CIMIS_APP_KEY` — the same CIMIS key used locally
+- `FLY_API_TOKEN` — from `fly tokens create deploy` (requires the Fly app
+  to already exist; run the `datasette publish fly` command above once
+  by hand first to create it)
 
 ## Refining acreage estimates
 

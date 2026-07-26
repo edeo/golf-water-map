@@ -1,0 +1,24 @@
+{
+  "title": "Desert Golf Course Water Use Map",
+  "description": "Estimated daily irrigation water use for desert golf courses in California and Arizona, derived from ETo x Kc x irrigated acreage.",
+  "databases": {
+    "golf_water": {
+      "tables": {
+        "latest_water_use": {
+          "title": "Latest water use by course",
+          "description": "Each course's most recent daily water-use estimate. Renders as a map (datasette-cluster-map) via the latitude/longitude columns."
+        }
+      },
+      "queries": {
+        "top_water_users": {
+          "sql": "SELECT name, state, date, gallons, acre_feet FROM latest_water_use ORDER BY gallons DESC",
+          "title": "Courses ranked by latest estimated water use"
+        },
+        "course_history": {
+          "sql": "SELECT c.name, d.date, d.eto_inches, d.gallons, d.acre_feet FROM daily_water_use d JOIN courses c ON c.course_id = d.course_id WHERE c.name = :name ORDER BY d.date",
+          "title": "Water use history for a course"
+        }
+      }
+    }
+  }
+}

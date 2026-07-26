@@ -12,10 +12,11 @@ Usage:
 import sqlite3
 import sys
 from datetime import date as date_cls
+from pathlib import Path
 
 from fetch_eto import fetch_eto
 
-DB_PATH = "data/golf_water.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "golf_water.db"
 GALLONS_PER_ACRE_INCH = 27154.0
 
 
