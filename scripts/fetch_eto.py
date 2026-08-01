@@ -34,6 +34,15 @@ CIMIS_APP_KEY = os.environ.get("CIMIS_APP_KEY", "")
 CIMIS_URL = "https://et.water.ca.gov/api/data"
 AZMET_URL = "https://api.azmet.arizona.edu/v1/observations/daily"
 
+# Both CIMIS and AZMET sit behind bot-detecting edge protection that
+# rejects requests' default "python-requests/x.y.z" User-Agent outright
+# (CIMIS returns an HTML "Request Rejected" WAF page instead of JSON).
+# A normal browser-style UA gets through.
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; golf-water-map/1.0)",
+    "Accept": "application/json",
+}
+
 # Real, active AZMET stations relevant to the Scottsdale/Phoenix desert
 # golf courses. "Scottsdale" (az18) itself is inactive, so Desert Ridge
 # is the practical nearest-active-station choice for all of them.
@@ -62,9 +71,12 @@ def fetch_cimis_eto_by_coords(lat: float, lon: float, date: str) -> dict:
         "dataItems": "day-asce-eto",
         "unitOfMeasure": "E",
     }
-    resp = requests.get(CIMIS_URL, params=params, timeout=30)
+    resp = requests.get(CIMIS_URL, params=params, headers=REQUEST_HEADERS, timeout=30)
     resp.raise_for_status()
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError:
+        raise RuntimeError(f"CIMIS did not return JSON (status {resp.status_code}): {resp.text[:300]}")
 
     record = data["Data"]["Providers"][0]["Records"][0]
     eto = record.get("DayAsceEto", {}).get("Value")
@@ -77,9 +89,12 @@ def fetch_azmet_eto(station_id: str, date: str) -> dict:
     Queries a single day of AZMET daily data for one station.
     """
     url = f"{AZMET_URL}/{station_id}/{date}T00:00/P0DT0H"
-    resp = requests.get(url, headers={"Accept": "application/json"}, timeout=30)
+    resp = requests.get(url, headers=REQUEST_HEADERS, timeout=30)
     resp.raise_for_status()
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError:
+        raise RuntimeError(f"AZMET did not return JSON (status {resp.status_code}): {resp.text[:300]}")
 
     record = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else {})
 
@@ -88,6 +103,10 @@ def fetch_azmet_eto(station_id: str, date: str) -> dict:
     # best inference from AZMET's documented data items -- confirm
     # against a live response and adjust if needed.
     eto = record.get("eto_pm_asce") or record.get("eto_asce") or record.get("eto")
+    if eto in (None, "") and record:
+        raise RuntimeError(
+            f"None of the guessed ETo field names matched. Actual fields: {sorted(record.keys())}"
+        )
     return {"eto_inches": float(eto) if eto not in (None, "") else None}
 
 
