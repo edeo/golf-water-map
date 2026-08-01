@@ -1,3 +1,4 @@
 requests
 datasette
 datasette-cluster-map
+datasette-publish-fly
