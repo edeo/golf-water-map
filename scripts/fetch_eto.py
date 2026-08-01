@@ -96,18 +96,19 @@ def fetch_azmet_eto(station_id: str, date: str) -> dict:
     except ValueError:
         raise RuntimeError(f"AZMET did not return JSON (status {resp.status_code}): {resp.text[:300]}")
 
-    record = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else {})
+    records = data.get("data") or []
+    if not records:
+        raise RuntimeError(f"AZMET returned no data records: {data}")
+    record = records[0]
 
-    # AZMET publishes both an ASCE Penman-Monteith ETo and AZMET's own
-    # original Penman-Monteith ETo, in inches. Field name below is my
-    # best inference from AZMET's documented data items -- confirm
-    # against a live response and adjust if needed.
-    eto = record.get("eto_pm_asce") or record.get("eto_asce") or record.get("eto")
-    if eto in (None, "") and record:
-        raise RuntimeError(
-            f"None of the guessed ETo field names matched. Actual fields: {sorted(record.keys())}"
-        )
-    return {"eto_inches": float(eto) if eto not in (None, "") else None}
+    # Confirmed against a live response: AZMET publishes ETo in both mm
+    # and inches, under "_in"-suffixed keys for inches. eto_pen_mon_in is
+    # the ASCE Penman-Monteith figure (the standard reference ET); AZMET's
+    # own eto_azmet_in is the fallback if that's ever missing.
+    eto = record.get("eto_pen_mon_in") or record.get("eto_azmet_in")
+    if eto in (None, ""):
+        raise RuntimeError(f"No ETo field found. Actual fields: {sorted(record.keys())}")
+    return {"eto_inches": float(eto)}
 
 
 def fetch_eto(network: str, station_or_coords, date: str) -> dict:
