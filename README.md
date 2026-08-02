@@ -62,11 +62,15 @@ same pattern as your blog pipeline) to build up history.
 ## View the map
 
 ```bash
-datasette data/golf_water.db --metadata metadata.json
+datasette data/golf_water.db --metadata metadata.json --template-dir templates
 ```
 
-Open the `latest_water_use` view — it renders as a map automatically, with
-marker size/popup showing each course's most recent gallons estimate.
+The homepage (`templates/pages/index.html`) is a custom Leaflet map that
+loads first — marker size and color both scale with each course's most
+recent gallons/day estimate (green = low, red = high). The raw
+`latest_water_use` view is still browsable separately via
+`datasette-cluster-map`'s default auto-plotted map if you want the plain
+table view instead.
 
 ## Deploy to Fly.io
 
@@ -76,7 +80,8 @@ Same pattern as your Datasette blog pipeline:
 datasette publish fly data/golf_water.db \
   --app golf-water-map \
   --metadata metadata.json \
-  --install datasette-cluster-map
+  --install datasette-cluster-map \
+  --template-dir templates
 ```
 
 `.github/workflows/daily-update.yml` runs `compute_water_use.py` on a

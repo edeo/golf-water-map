@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Desert Golf Course Water Use Map{% endblock %}
+
+{% block content %}
+<style>
+  #map { height: 80vh; width: 100%; margin-top: 1em; }
+  .legend {
+    position: absolute; bottom: 30px; right: 30px; z-index: 1000;
+    background: white; padding: 10px 14px; border-radius: 6px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.4); font: 13px/1.4 sans-serif;
+  }
+  .legend .gradient {
+    height: 10px; width: 160px; margin-top: 4px;
+    background: linear-gradient(to right, hsl(130,80%,45%), hsl(0,80%,45%));
+    border-radius: 3px;
+  }
+  .legend .scale-labels { display: flex; justify-content: space-between; font-size: 11px; }
+</style>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<h1>Desert Golf Course Water Use Map</h1>
+<p>Estimated daily irrigation water use, most recent day available per course. Marker size and color both scale with gallons/day.</p>
+
+<div style="position: relative;">
+  <div id="map"></div>
+  <div class="legend">
+    <strong>Gallons / day</strong>
+    <div class="gradient"></div>
+    <div class="scale-labels"><span id="legend-min">-</span><span id="legend-max">-</span></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map').setView([33.8, -114.5], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  function colorFor(t) {
+    const hue = 130 - t * 130; // green (low use) -> red (high use)
+    return `hsl(${hue}, 80%, 45%)`;
+  }
+
+  fetch('/golf_water/latest_water_use.json?_shape=array&_size=max')
+    .then(r => r.json())
+    .then(rows => {
+      rows = rows.filter(r => r.gallons != null && r.latitude != null && r.longitude != null);
+      if (!rows.length) return;
+
+      const gallonsVals = rows.map(r => r.gallons);
+      const min = Math.min(...gallonsVals);
+      const max = Math.max(...gallonsVals);
+      document.getElementById('legend-min').textContent = Math.round(min).toLocaleString();
+      document.getElementById('legend-max').textContent = Math.round(max).toLocaleString();
+
+      const bounds = [];
+      rows.forEach(r => {
+        const t = max > min ? (r.gallons - min) / (max - min) : 0.5;
+        const marker = L.circleMarker([r.latitude, r.longitude], {
+          radius: 7 + 25 * t,
+          color: '#333',
+          weight: 1,
+          fillColor: colorFor(t),
+          fillOpacity: 0.75
+        }).addTo(map);
+        marker.bindPopup(
+          `<strong>${r.name}</strong><br>` +
+          `${r.state} &middot; ${r.date}<br>` +
+          `${Math.round(r.gallons).toLocaleString()} gal/day<br>` +
+          `${r.acre_feet.toFixed(2)} acre-ft/day`
+        );
+        bounds.push([r.latitude, r.longitude]);
+      });
+      map.fitBounds(bounds, { padding: [40, 40] });
+    });
+</script>
+{% endblock %}
