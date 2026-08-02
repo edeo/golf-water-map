@@ -50,4 +50,5 @@ jobs:
             --app golf-water-map \
             --metadata metadata.json \
             --install datasette-cluster-map \
+            --template-dir templates \
             --yes
