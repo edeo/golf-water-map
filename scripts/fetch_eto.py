@@ -2,16 +2,17 @@
 Fetch daily reference evapotranspiration (ETo) from CIMIS (California)
 and AZMET (Arizona).
 
-CIMIS -- queried directly by lat/lon coordinate (Spatial CIMIS System),
-so no station assignment is needed for CA courses at all. Requires a
-free app key for the /api/data endpoint: register at
-https://cimis.water.ca.gov/, then set the CIMIS_APP_KEY environment
-variable. (Station metadata itself -- https://et.water.ca.gov/api/station
--- is public with no key required, but isn't needed with the coordinate
-approach.) Confirmed against CIMIS's own docs at https://et.water.ca.gov/Rest/Index:
-coordinate requests only support the 'day-asce-eto' and 'day-sol-rad-avg'
-data items (ERR2114 if you ask for anything else), which is exactly
-what we need. Coordinates outside California return ERR1034.
+CIMIS -- queried directly by lat/lon coordinate via the Spatial CIMIS
+System (SCS), so no station assignment is needed for CA courses. Confirmed
+against the current API docs at https://cimis.water.ca.gov/web-api/rest-api/latest
+(CIMIS moved off its old single-endpoint API to five separate REST
+endpoints behind Azure API Management). Coordinate requests go to
+GetDataBySpatialCoordinates and auth is via the Ocp-Apim-Subscription-Key
+header, NOT a query-string appKey -- the old /api/data + appKey= approach
+is a decommissioned endpoint that gets rejected by CIMIS's edge WAF before
+it's even parsed. Register a free key at https://cimis.water.ca.gov/, then
+set the CIMIS_APP_KEY environment variable. Coordinates outside California
+return ERR1034.
 
 AZMET -- station-based, public API, no key required. Confirmed endpoint
 format from AZMET's own PDF ("Programmatic Access to Hourly and Daily
@@ -19,24 +20,19 @@ AZMet Data with a Web API"):
     https://api.azmet.arizona.edu/v1/observations/daily/{stationID}/{startDate}/{timeInterval}
 e.g. https://api.azmet.arizona.edu/v1/observations/daily/az27/2026-07-20T00:00/P0DT0H
 stationID is one of AZMET's ~30 station codes (see AZMET_STATIONS below
-for the ones relevant to the Scottsdale/Phoenix courses).
-
-I could not do a live test call against the AZMET API from this
-environment (robots.txt blocks automated fetches), so the exact JSON
-field name for daily ETo in fetch_azmet_eto() below is my best read of
-AZMET's documented data items -- verify it against a real response and
-adjust if the key differs.
+for the ones relevant to the Scottsdale/Phoenix courses). Confirmed
+against a live response: the record lives at data['data'][0], and ETo in
+inches is under 'eto_pen_mon_in' (ASCE Penman-Monteith).
 """
 import os
 import requests
 
 CIMIS_APP_KEY = os.environ.get("CIMIS_APP_KEY", "")
-CIMIS_URL = "https://et.water.ca.gov/api/data"
+CIMIS_SPATIAL_COORDS_URL = "https://et.water.ca.gov/SpatialWeb/GetDataBySpatialCoordinates"
 AZMET_URL = "https://api.azmet.arizona.edu/v1/observations/daily"
 
 # Both CIMIS and AZMET sit behind bot-detecting edge protection that
-# rejects requests' default "python-requests/x.y.z" User-Agent outright
-# (CIMIS returns an HTML "Request Rejected" WAF page instead of JSON).
+# rejects requests' default "python-requests/x.y.z" User-Agent outright.
 # A normal browser-style UA gets through.
 REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; golf-water-map/1.0)",
@@ -64,14 +60,14 @@ def fetch_cimis_eto_by_coords(lat: float, lon: float, date: str) -> dict:
         raise RuntimeError("Set CIMIS_APP_KEY env var (free registration at cimis.water.ca.gov)")
 
     params = {
-        "appKey": CIMIS_APP_KEY,
-        "targets": f"lat={lat},lng={lon}",
+        "coordinates": f"lat={lat},lng={lon}",
         "startDate": date,
         "endDate": date,
         "dataItems": "day-asce-eto",
         "unitOfMeasure": "E",
     }
-    resp = requests.get(CIMIS_URL, params=params, headers=REQUEST_HEADERS, timeout=30)
+    headers = {**REQUEST_HEADERS, "Ocp-Apim-Subscription-Key": CIMIS_APP_KEY}
+    resp = requests.get(CIMIS_SPATIAL_COORDS_URL, params=params, headers=headers, timeout=30)
     resp.raise_for_status()
     try:
         data = resp.json()
