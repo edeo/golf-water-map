@@ -1,17 +1,21 @@
 """
-For each course in the DB, fetch today's (or a given date's) ETo and
+For each course in the DB, fetch yesterday's (or a given date's) ETo and
 write an estimated water-use row to daily_water_use.
 
 Water use (gallons) = ETo_inches * Kc * irrigated_acres * 27,154
   (27,154 gallons = 1 acre-inch of water)
 
+Defaults to yesterday rather than today: both CIMIS and AZMET finalize
+a day's readings after that day ends, so querying the current date
+always comes back empty.
+
 Usage:
-    python scripts/compute_water_use.py                # today
+    python scripts/compute_water_use.py                # yesterday
     python scripts/compute_water_use.py 2026-07-20      # specific date
 """
 import sqlite3
 import sys
-from datetime import date as date_cls
+from datetime import date as date_cls, timedelta
 from pathlib import Path
 
 from fetch_eto import fetch_eto
@@ -64,6 +68,6 @@ def compute_for_date(target_date: str):
 
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else date_cls.today().isoformat()
+    target = sys.argv[1] if len(sys.argv) > 1 else (date_cls.today() - timedelta(days=1)).isoformat()
     print(f"Computing water use estimates for {target}...")
     compute_for_date(target)

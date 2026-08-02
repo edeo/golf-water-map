@@ -52,7 +52,7 @@ station is nearest -- full list at https://azmet.arizona.edu/about/station-metad
 ```bash
 export CIMIS_APP_KEY=your_key_here
 cd scripts
-python compute_water_use.py              # today
+python compute_water_use.py              # yesterday (both APIs lag same-day data)
 python compute_water_use.py 2026-07-20    # backfill a specific date
 ```
 
