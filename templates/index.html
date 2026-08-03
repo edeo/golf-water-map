@@ -67,11 +67,13 @@
           fillColor: colorFor(t),
           fillOpacity: 0.75
         }).addTo(map);
+        const rainNote = r.precip_inches ? `<br>${r.precip_inches.toFixed(2)}in rain offset that day` : '';
         marker.bindPopup(
           `<strong>${r.name}</strong><br>` +
           `${r.state} &middot; ${r.date}<br>` +
           `${Math.round(r.gallons).toLocaleString()} gal/day<br>` +
-          `${r.acre_feet.toFixed(2)} acre-ft/day`
+          `${r.acre_feet.toFixed(2)} acre-ft/day` +
+          rainNote
         );
         bounds.push([r.latitude, r.longitude]);
       });

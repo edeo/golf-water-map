@@ -104,7 +104,12 @@ def fetch_azmet_eto(station_id: str, date: str) -> dict:
     eto = record.get("eto_pen_mon_in") or record.get("eto_azmet_in")
     if eto in (None, ""):
         raise RuntimeError(f"No ETo field found. Actual fields: {sorted(record.keys())}")
-    return {"eto_inches": float(eto)}
+
+    precip = record.get("precip_total_in")
+    return {
+        "eto_inches": float(eto),
+        "precip_inches": float(precip) if precip not in (None, "") else 0.0,
+    }
 
 
 def fetch_eto(network: str, station_or_coords, date: str) -> dict:

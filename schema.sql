@@ -17,10 +17,11 @@ CREATE TABLE IF NOT EXISTS daily_water_use (
     course_id       INTEGER NOT NULL REFERENCES courses(course_id),
     date            TEXT NOT NULL,          -- YYYY-MM-DD
     eto_inches      REAL,                   -- reference ET for that day
+    precip_inches   REAL,                   -- rainfall that day, when the source provides it (AZMET only; NULL for CIMIS/CA courses)
     tmax_f          REAL,
     tmin_f          REAL,
     wind_mph        REAL,
-    gallons         REAL,                   -- estimated water use = ETo * Kc * area, converted
+    gallons         REAL,                   -- estimated net irrigation = max(0, ETo*Kc - precip) * area, converted
     acre_feet       REAL,
     PRIMARY KEY (course_id, date)
 );
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS daily_water_use (
 CREATE VIEW IF NOT EXISTS latest_water_use AS
 SELECT c.course_id, c.name, c.state, c.latitude, c.longitude,
        c.irrigated_acres, c.turf_type,
-       d.date, d.eto_inches, d.gallons, d.acre_feet
+       d.date, d.eto_inches, d.precip_inches, d.gallons, d.acre_feet
 FROM courses c
 JOIN daily_water_use d ON d.course_id = c.course_id
 WHERE d.date = (SELECT MAX(date) FROM daily_water_use d2 WHERE d2.course_id = c.course_id);

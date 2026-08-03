@@ -2,8 +2,13 @@
 For each course in the DB, fetch yesterday's (or a given date's) ETo and
 write an estimated water-use row to daily_water_use.
 
-Water use (gallons) = ETo_inches * Kc * irrigated_acres * 27,154
+Net irrigation demand (inches) = max(0, ETo_inches * Kc - precip_inches)
+Water use (gallons) = net irrigation demand * irrigated_acres * 27,154
   (27,154 gallons = 1 acre-inch of water)
+
+precip_inches only comes from AZMET (AZ courses) -- CIMIS's coordinate-based
+lookup doesn't include precipitation, so CA courses always get precip=0,
+i.e. pure demand with no rainfall offset.
 
 Defaults to yesterday rather than today: both CIMIS and AZMET finalize
 a day's readings after that day ends, so querying the current date
@@ -24,9 +29,28 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "golf_water.db"
 GALLONS_PER_ACRE_INCH = 27154.0
 
 
+def migrate(conn):
+    """Idempotent schema updates for databases created before precip tracking."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_water_use)")}
+    if "precip_inches" not in columns:
+        conn.execute("ALTER TABLE daily_water_use ADD COLUMN precip_inches REAL")
+    conn.execute("DROP VIEW IF EXISTS latest_water_use")
+    conn.execute("""
+        CREATE VIEW latest_water_use AS
+        SELECT c.course_id, c.name, c.state, c.latitude, c.longitude,
+               c.irrigated_acres, c.turf_type,
+               d.date, d.eto_inches, d.precip_inches, d.gallons, d.acre_feet
+        FROM courses c
+        JOIN daily_water_use d ON d.course_id = c.course_id
+        WHERE d.date = (SELECT MAX(date) FROM daily_water_use d2 WHERE d2.course_id = c.course_id)
+    """)
+    conn.commit()
+
+
 def compute_for_date(target_date: str):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    migrate(conn)
     courses = conn.execute("SELECT * FROM courses").fetchall()
 
     rows_written = 0
@@ -49,18 +73,21 @@ def compute_for_date(target_date: str):
         if eto is None:
             print(f"  no ETo value returned for {c['name']} on {target_date}")
             continue
+        precip = weather.get("precip_inches") or 0.0
 
-        gallons = eto * c["kc"] * c["irrigated_acres"] * GALLONS_PER_ACRE_INCH
-        acre_feet = (eto * c["kc"] * c["irrigated_acres"]) / 12.0
+        net_inches = max(0.0, eto * c["kc"] - precip)
+        gallons = net_inches * c["irrigated_acres"] * GALLONS_PER_ACRE_INCH
+        acre_feet = (net_inches * c["irrigated_acres"]) / 12.0
 
         conn.execute(
             """INSERT OR REPLACE INTO daily_water_use
-               (course_id, date, eto_inches, gallons, acre_feet)
-               VALUES (?, ?, ?, ?, ?)""",
-            (c["course_id"], target_date, eto, gallons, acre_feet),
+               (course_id, date, eto_inches, precip_inches, gallons, acre_feet)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (c["course_id"], target_date, eto, precip, gallons, acre_feet),
         )
         rows_written += 1
-        print(f"  {c['name']}: ETo={eto:.2f}in -> {gallons:,.0f} gal")
+        rain_note = f", rain={precip:.2f}in offset" if precip else ""
+        print(f"  {c['name']}: ETo={eto:.2f}in{rain_note} -> {gallons:,.0f} gal")
 
     conn.commit()
     conn.close()
